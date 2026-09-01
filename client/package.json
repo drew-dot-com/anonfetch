@@ -1,0 +1,14 @@
+{
+  "name": "anonfetch-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pay a TOON node for one anonymous fetch over the Anyone network",
+  "type": "module",
+  "scripts": {
+    "fetch": "node fetch.mjs"
+  },
+  "dependencies": {
+    "@toon-protocol/client": "^2.1.1"
+  },
+  "engines": { "node": ">=22" }
+}

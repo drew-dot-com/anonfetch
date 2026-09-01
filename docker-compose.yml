@@ -1,0 +1,25 @@
+# anonfetch: its own compose project, joined to the node's existing network so
+# the edge connector reaches it as http://anonfetch:3500 without touching the
+# five-overlay stack in /opt/toon-relay/deploy. Nothing here is host-published.
+services:
+  anonfetch:
+    build: .
+    image: anonfetch:local
+    container_name: anonfetch
+    environment:
+      PORT: '3500'
+      JOB_KIND: '5301'
+      MAX_BODY_BYTES: '24576'
+      FETCH_TIMEOUT_MS: '25000'
+    expose: ['3500']
+    networks: [relay_deploy_net]
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3500/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    restart: unless-stopped
+networks:
+  relay_deploy_net:
+    external: true

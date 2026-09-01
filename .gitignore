@@ -1,0 +1,4 @@
+node_modules/
+client/channel-store.json
+*.key
+*.json.bak
