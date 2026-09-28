@@ -8,7 +8,7 @@ second round trip.
 
 ## You need
 
-- Node 22+
+- Node 22+ (the client is `@toon-protocol/client` 3.x; the node refuses 2.x)
 - A Solana mainnet keypair file in `solana-keygen` JSON format, holding
   about **0.5 USDC** and **0.01 SOL** (the SOL pays for the one channel-open tx)
 
@@ -39,14 +39,17 @@ round trip 810 ms
 {"ip":"138.68.98.89"}
 ```
 
-Try a page and a HEAD:
+Try a page, a HEAD, and the page as markdown with its content hash:
 
 ```bash
 node fetch.mjs 'https://en.wikipedia.org/wiki/Onion_routing' > page.html
 node fetch.mjs 'https://www.anyone.io/' HEAD
+node fetch.mjs 'https://en.wikipedia.org/wiki/Onion_routing' GET extract > page.md
 ```
 
-Bodies are capped at 24 KiB (`truncated: true` tells you). The node runs the
+Bodies are capped at 24 KiB (`truncated: true` tells you); `extract` mode
+returns markdown, which usually fits where the HTML did not, plus
+`content_hash` (wuzzy/crawl v1) and `raw_hash`. The node runs the
 stock `anon` client from `@anyone-protocol/anyone-client`; nothing about the
 Anyone side is modified.
 

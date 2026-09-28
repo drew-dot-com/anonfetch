@@ -12,10 +12,17 @@
 // the destination sees an Anyone exit, never this node's IP, and the payer's
 // identity is a channel key, never an IP. The receipt is the same
 // base64(JSON) `data` shape the store answers with, so `sendJob` decodes it.
+//
+// 2026-09-28: `param mode` (raw | extract). `extract` runs the page through
+// wuzzy/crawl v1 (Readability + Turndown + a pinned normalization, see
+// canonicalize.mjs) and answers with markdown and the content hash that
+// procedure yields, so a page that does not fit the 24 KiB body cap as HTML
+// mostly does as markdown, and the hash is one a third party can reproduce.
 import http from 'node:http'
 import net from 'node:net'
 import { createRequire } from 'node:module'
 import { verifyEvent } from 'nostr-tools/pure'
+import { MODES, rawReceipt, extractReceipt } from './receipt.mjs'
 
 const require = createRequire(import.meta.url)
 const { Process, Socks } = require('@anyone-protocol/anyone-client')
@@ -30,7 +37,6 @@ const MAX_REQUEST_BYTES = 256 * 1024
 const DEV_MODE = process.env.DEV_MODE === 'true'
 const IP_CHECK_URL = process.env.IP_CHECK_URL ?? 'https://api.ipify.org?format=json'
 const ALLOWED_METHODS = new Set(['GET', 'HEAD'])
-const RECEIPT_HEADERS = ['content-type', 'content-length', 'server', 'date', 'location', 'cache-control']
 
 const log = (...a) => console.log('[anonfetch]', ...a)
 
@@ -128,6 +134,9 @@ async function handleFetch(req, res) {
   if (!ALLOWED_METHODS.has(method)) return refuse(res, 422, 'F00', `method must be one of ${[...ALLOWED_METHODS].join(', ')}`)
   const target = validateTarget(rawUrl)
   if (target.err) return refuse(res, 422, 'F00', target.err)
+  const mode = (paramOf(event, 'mode') ?? 'raw').toLowerCase()
+  if (!MODES.has(mode)) return refuse(res, 422, 'F00', `mode must be one of ${[...MODES].join(', ')}`)
+  if (mode === 'extract' && method !== 'GET') return refuse(res, 422, 'F00', 'mode extract needs method GET')
 
   if (!bootstrapped || !anon.isRunning()) return refuse(res, 502, 'T00', 'Anyone client is not bootstrapped')
 
@@ -152,26 +161,27 @@ async function handleFetch(req, res) {
   }
   const ms = Date.now() - t0
   const full = Buffer.from(r.data ?? Buffer.alloc(0))
-  const truncated = full.length > MAX_BODY_BYTES
-  const slice = truncated ? full.subarray(0, MAX_BODY_BYTES) : full
-  const headers = {}
-  for (const h of RECEIPT_HEADERS) if (r.headers?.[h] !== undefined) headers[h] = String(r.headers[h])
-
-  const receipt = {
-    via: 'anyone',
+  const input = {
     url: target.url,
+    finalUrl: r.request?.res?.responseUrl ?? target.url,
     method,
     status: r.status,
-    headers,
-    bytes: full.length,
-    returned_bytes: slice.length,
-    truncated,
-    max_body_bytes: MAX_BODY_BYTES,
-    body_b64: slice.toString('base64'),
-    elapsed_ms: ms,
-    job_id: event.id,
+    headers: r.headers ?? {},
+    body: full,
+    fetchedAt: t0,
+    elapsedMs: ms,
+    jobId: event.id,
+    maxBodyBytes: MAX_BODY_BYTES,
   }
-  log(`kind=${event.kind} id=${event.id} payer=${payer ?? '-'} amount=${amount ?? '-'} chain=${chain ?? '-'} ${method} ${target.url} -> ${r.status} bytes=${full.length}${truncated ? ' (truncated)' : ''} ms=${ms}`)
+  let receipt
+  try {
+    receipt = mode === 'extract' ? extractReceipt(input) : rawReceipt(input)
+  } catch (e) {
+    log(`kind=${event.kind} id=${event.id} ${mode} ${target.url} -> canonicalize failed: ${e.message}`)
+    return refuse(res, 502, 'T00', `extract failed: ${e.message}`)
+  }
+  const truncated = receipt.truncated
+  log(`kind=${event.kind} id=${event.id} payer=${payer ?? '-'} amount=${amount ?? '-'} chain=${chain ?? '-'} ${mode} ${method} ${target.url} -> ${r.status} bytes=${full.length}${mode === 'extract' ? ` md=${receipt.content_bytes} hash=${receipt.content_hash ?? 'thin'}` : ''}${truncated ? ' (truncated)' : ''} ms=${ms}`)
   const data = Buffer.from(JSON.stringify(receipt)).toString('base64')
   return send(res, 200, { accept: true, data, result: receipt, payer, amount, chain })
 }
@@ -189,6 +199,7 @@ const server = http.createServer(async (req, res) => {
         kind: JOB_KIND,
         max_body_bytes: MAX_BODY_BYTES,
         fetch_timeout_ms: FETCH_TIMEOUT_MS,
+        modes: [...MODES],
       })
     }
     if (req.method === 'POST' && req.url === '/fetch') return await handleFetch(req, res)

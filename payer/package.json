@@ -1,0 +1,16 @@
+{
+  "name": "anonfetch-payer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local sidecar that pays a TOON node per fetch: holds one payment channel, a daily cap and an origin allowlist, and answers GET /extract?url= with the page as markdown plus its content hash",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@toon-protocol/client": "^3.1.1"
+  },
+  "engines": { "node": ">=22" }
+}

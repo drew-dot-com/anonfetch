@@ -1,16 +1,22 @@
 {
   "name": "anonfetch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Paid anonymous HTTP fetch behind a TOON node: a NIP-90 job (kind 5301) fetched over the Anyone network",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@anyone-protocol/anyone-client": "1.1.3",
-    "nostr-tools": "^2.10.4"
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.13",
+    "nostr-tools": "^2.10.4",
+    "turndown": "^7.2.4"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

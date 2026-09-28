@@ -1,4 +1,3 @@
-node_modules/
-client/channel-store.json
-*.key
-*.json.bak
+node_modules
+client/channel-store*.json
+payer/node_modules
