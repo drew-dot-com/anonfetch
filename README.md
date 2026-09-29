@@ -91,8 +91,9 @@ const event = buildJobEvent({ kind: 5301, params: { url, method: 'GET', mode: 'e
 const answer = await sendJob({ client, destination: 'g.drew.anon', timeoutMs: 60_000 }, event)
 ```
 
-The node speaks the ADR 0069 wire, so the client must be `@toon-protocol/client`
-3.x (2.x is refused). `npm test` checks the receipt shapes and the
+The node accepts only x402 `batch-settlement` vouchers (connector ADR 0075), so
+the client must be `@toon-protocol/client` 4.x; older clients' `toon-channel`
+claims are refused. `npm test` checks the receipt shapes and the
 canonicalization vectors without the Anyone client running.
 
 ## Paying for it from an agent

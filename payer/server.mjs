@@ -4,8 +4,9 @@
 //   GET /extract?url=<absolute url>
 // and gets the page back as markdown with its content hash (wuzzy/crawl v1),
 // fetched by the node over the Anyone network. Each answer cost one ILP
-// packet: this process holds the payment channel, signs the cumulative claim,
-// and enforces a daily cap, a per-fetch price ceiling and an origin allowlist
+// packet: this process holds an x402 batch-settlement channel, signs the
+// cumulative voucher (@toon-protocol/client 4.x, connector ADR 0075), and
+// enforces a daily cap, a per-fetch price ceiling and an origin allowlist
 // BEFORE a packet is built. Nothing here runs unless a URL is asked for; the
 // only money that can move is what the cap allows.
 //
@@ -20,8 +21,10 @@
 //   SOLANA_KEYPAIR_JSON     the 64-byte array inline, for a container that mounts no file
 //   SOLANA_RPC              default https://api.mainnet-beta.solana.com
 //   PAYER_HOME              channel store + budget ledger, default ~/.anonfetch-payer
-//   PAYER_CHANNEL_STORE     the channel store file itself, default <PAYER_HOME>/channel-store.json
-//   PAYER_CHANNEL_DEPOSIT   base units locked when a channel is opened, default 500000 (0.50 USDC)
+//   PAYER_CHANNEL_STORE     the channel store file itself, default <PAYER_HOME>/channels.json
+//                           (bindings in the sibling channels.peers.json)
+//   PAYER_CHANNEL_DEPOSIT   base units locked when a channel is opened, default 500000 (0.50 USDC);
+//                           the client raises it to the node's published minDeposit if lower
 //   PAYER_DAILY_CAP         base units per UTC day, default 100000 (0.10 USDC = 100 fetches at 1000)
 //   PAYER_MAX_PRICE         refuse a route priced above this per fetch, default 5000
 //   PAYER_ALLOWED_ORIGINS   comma-separated origins; EMPTY MEANS ANY ORIGIN (disclosed in README)
@@ -30,9 +33,9 @@ import http from 'node:http'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import crypto from 'node:crypto'
 import { ToonClient, buildJobEvent, sendJob, chargeFor } from '@toon-protocol/client'
 import { Budget } from './budget.mjs'
+import { clientConfig } from './client-config.mjs'
 
 const env = (k, d) => process.env[k] ?? d
 const PORT = Number(env('PAYER_PORT', 3502))
@@ -56,6 +59,8 @@ const budget = new Budget({
 })
 
 // ── The channel: one ToonClient, opened on first use ────────────────────────
+// On Solana the connector sponsors the open (the payer needs USDC in its token
+// account, no SOL). See client-config.mjs.
 let clientP = null
 function client() {
   if (!clientP) {
@@ -63,17 +68,13 @@ function client() {
     const secret = process.env.SOLANA_KEYPAIR_JSON
       ? Uint8Array.from(JSON.parse(process.env.SOLANA_KEYPAIR_JSON))
       : Uint8Array.from(JSON.parse(fs.readFileSync(env('SOLANA_KEYPAIR', path.join(os.homedir(), '.config/solana/id.json')), 'utf8')))
-    clientP = ToonClient.create({
-      connector: EDGE,
-      solanaSecretKey: secret,
-      evmPrivateKey: '0x' + crypto.randomBytes(32).toString('hex'), // unused; the SDK wants one
-      chain: 'solana',
-      rpcUrl: RPC,
-      transport: 'http',
-      channelStore: env('PAYER_CHANNEL_STORE', path.join(HOME, 'channel-store.json')),
-      autoOpenChannel: true,
+    clientP = ToonClient.create(clientConfig({
+      edge: EDGE,
+      secret,
+      rpc: RPC,
+      store: env('PAYER_CHANNEL_STORE', path.join(HOME, 'channels.json')),
       deposit: DEPOSIT,
-    }).catch((e) => { clientP = null; throw e })
+    })).catch((e) => { clientP = null; throw e })
   }
   return clientP
 }
@@ -94,7 +95,7 @@ async function priceFor(event) {
   try { return chargeFor(terms, Buffer.byteLength(JSON.stringify({ event }))) } catch { return (await client()).price(DEST) }
 }
 
-// One channel, cumulative claims: jobs go one at a time.
+// One channel, cumulative vouchers: jobs go one at a time.
 let chain = Promise.resolve()
 const serialize = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p }
 

@@ -1,3 +1,4 @@
 node_modules
 client/channel-store*.json
+client/channels*.json
 payer/node_modules

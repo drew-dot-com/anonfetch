@@ -1,16 +1,18 @@
 # Try it: pay for one anonymous fetch
 
 This runs against a live TOON node on Solana mainnet. One fetch costs
-1000 base units of USDC, which is $0.001. The first run also opens a payment
-channel to the node with 0.10 USDC of collateral, in one on-chain transaction.
-Every run after that is an off-chain signed claim: no transaction, about one
-second round trip.
+1000 base units of USDC, which is $0.001. The first run also opens an x402
+payment channel to the node with 0.10 USDC of collateral; the node sponsors
+that open, so you pay no SOL for it. Every run after that is an off-chain
+signed voucher: no transaction, about one second round trip.
 
 ## You need
 
-- Node 22+ (the client is `@toon-protocol/client` 3.x; the node refuses 2.x)
+- Node 22+ (the client is `@toon-protocol/client` 4.x; the node accepts only
+  x402 `batch-settlement` vouchers and refuses older clients)
 - A Solana mainnet keypair file in `solana-keygen` JSON format, holding
-  about **0.5 USDC** and **0.01 SOL** (the SOL pays for the one channel-open tx)
+  about **0.5 USDC** in its USDC token account. No SOL is needed to open;
+  SOL is only needed later, to leave the channel.
 
 ## Run
 
@@ -60,13 +62,15 @@ you  --ILP PREPARE, kind 5301 job, 1000 units-->  TOON connector  --POST /fetch-
 you  <--ILP FULFILL, receipt + body-----------------  connector  <--200 JSON-------  anonfetch  <----------------------------------------------
 ```
 
-- The node verified your claim itself and told the app who paid, as a
+- The node verified your voucher itself and told the app who paid, as a
   channel key, not an IP or a person. The destination saw an Anyone exit.
 - The node's public self-description lists the route and its price:
   `https://connector.167-233-221-236.sslip.io/ilp`
-- Your channel state is in `client/channel-store.json`. Keep it: it is the
-  watermark of what you have signed. Deleting it and re-running opens a new
-  channel.
+- Your channel state is in `client/channels.json` (the running total you
+  have signed) and `client/channels.peers.json` (the channel's config). Keep
+  both. The total can be recovered from the node, but the config cannot:
+  without it the channel cannot be found again or left, and re-running opens
+  a new channel with a fresh deposit.
 
 ## Point it somewhere else
 
